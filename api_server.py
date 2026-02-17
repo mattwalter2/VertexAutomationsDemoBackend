@@ -289,6 +289,5 @@ def health():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3002))
-    print(f"\n✅ Starting API server on http://localhost:{port}")
     print("📊 Ready to serve Google Sheets, Calendar & WhatsApp data\n")
     app.run(host='0.0.0.0', port=port, debug=False)
