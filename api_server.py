@@ -57,7 +57,7 @@ def initiate_call():
                 "variableValues": {
                     "name": name,
                     'number': phone_number,
-                    'procedure_interest': procedure_interest
+                    'plumbing_issue': procedure_interest  # Map 'procedure_interest' from frontend to 'plumbing_issue' for agent
                 }
             },
         }
@@ -132,6 +132,61 @@ def get_google_service(service_name, version, scopes):
     return build(service_name, version, credentials=creds)
 
 
+def check_calendar_availability(date_str):
+    """
+    Checks for available slots on a given date.
+    Returns a string description of availability.
+    """
+    try:
+        SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+        service = get_google_service('calendar', 'v3', SCOPES)
+
+        # Parse date and set time range for the day (9 AM - 5 PM)
+        day_start = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=9, minute=0, second=0)
+        day_end = day_start.replace(hour=17, minute=0, second=0)
+        
+        # Convert to UTC ISO format for Google Calendar
+        time_min = day_start.isoformat() + 'Z'
+        time_max = day_end.isoformat() + 'Z'
+
+        print(f"🔎 Checking availability for {date_str} ({time_min} to {time_max})...")
+
+        events_result = service.events().list(
+            calendarId=CALENDAR_ID, 
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        events = events_result.get('items', [])
+        
+        if not events:
+            return f"The whole day on {date_str} is legally free! (9 AM - 5 PM)"
+        
+        busy_times = []
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            end = event['end'].get('dateTime', event['end'].get('date'))
+            # Format nicely: 10:00 AM - 11:00 AM
+            try:
+                s_dt = datetime.fromisoformat(start)
+                e_dt = datetime.fromisoformat(end)
+                time_str = f"{s_dt.strftime('%I:%M %p')} - {e_dt.strftime('%I:%M %p')}"
+                busy_times.append(time_str)
+            except:
+                continue
+
+        if busy_times:
+            return f"The following times are BUSY on {date_str}: {', '.join(busy_times)}. Any other time between 9 AM and 5 PM is free."
+        else:
+             return f"The whole day on {date_str} is free!"
+
+    except Exception as e:
+        print(f"❌ Error checking availability: {e}")
+        return "Sorry, I couldn't check the calendar right now."
+
+
 @app.route('/api/appointments', methods=['GET'])
 def get_appointments():
     """Fetch appointments from Google Calendar."""
@@ -193,7 +248,21 @@ def vapi_webhook():
 
                 print(f"🔧 Tool Call: {function_name} with args {function_args}")
 
-                if function_name == 'Vertex_Automations_Schedule_Appointment':
+                if function_name == 'check_availability':
+                    # Parse arguments
+                    import json
+                    if isinstance(function_args, str):
+                        args = json.loads(function_args)
+                    else:
+                        args = function_args
+                    
+                    date_str = args.get('date')
+                    if date_str:
+                        result_content = check_calendar_availability(date_str)
+                    else:
+                        result_content = "Error: Please provide a date in YYYY-MM-DD format."
+                
+                elif function_name == 'Vertex_Automations_Schedule_Appointment':
                     # Parse arguments (they might come as string or dict)
                     import json
                     if isinstance(function_args, str):
@@ -222,22 +291,34 @@ def vapi_webhook():
 
                             end_time = start_time + timedelta(hours=1)
                             
-                            event = {
-                                'summary': f"Dental Appt: {name}",
-                                'description': f"Booked via Vapi Voice Agent. Patient: {name}",
-                                'start': {
-                                    'dateTime': start_time.isoformat(),
-                                    'timeZone': 'America/New_York',
-                                },
-                                'end': {
-                                    'dateTime': end_time.isoformat(),
-                                    'timeZone': 'America/New_York',
-                                },
-                            }
+                            # Check for conflicts
+                            events_result = service.events().list(
+                                calendarId=CALENDAR_ID, 
+                                timeMin=start_time.isoformat(),
+                                timeMax=end_time.isoformat(),
+                                singleEvents=True
+                            ).execute()
                             
-                            created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
-                            result_content = f"Success! Appointment booked for {day} at {time_iso}. Event ID: {created_event.get('id')}"
-                            print(f"✅ Event created: {created_event.get('htmlLink')}")
+                            if events_result.get('items', []):
+                                result_content = f"Error: The slot {time_iso} on {day} is already booked. Please choose another time."
+                                print(f"⚠️ Double booking prevented for {day} {time_iso}")
+                            else:
+                                event = {
+                                    'summary': f"Plumbing Service: {name}",
+                                    'description': f"Booked via Vapi Voice Agent. Customer: {name}. Service Type: {args.get('service_type', 'General')}",
+                                    'start': {
+                                        'dateTime': start_time.isoformat(),
+                                        'timeZone': 'America/New_York',
+                                    },
+                                    'end': {
+                                        'dateTime': end_time.isoformat(),
+                                        'timeZone': 'America/New_York',
+                                    },
+                                }
+                                
+                                created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
+                                result_content = f"Success! Appointment booked for {day} at {time_iso}. Event ID: {created_event.get('id')}"
+                                print(f"✅ Event created: {created_event.get('htmlLink')}")
 
                             # --- Trigger n8n Webhook for Follow-up ---
                             try:
