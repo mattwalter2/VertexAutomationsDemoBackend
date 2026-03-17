@@ -35,7 +35,13 @@ def initiate_call():
             return jsonify({'error': 'Phone number is required'}), 400
 
         api_key = os.getenv('VAPI_API_KEY')
-        assistant_id = os.getenv('VAPI_ASSISTANT_ID')
+        # Resolve assistant ID server-side using demoType — IDs never leave the backend.
+        demo_type = data.get('demoType', 'plumbing')
+        assistant_id_map = {
+            'plumbing': os.getenv('VAPI_PLUMBING_ASSISTANT_ID'),
+            'dental':   os.getenv('VAPI_DENTAL_ASSISTANT_ID'),
+        }
+        assistant_id = assistant_id_map.get(demo_type) or os.getenv('VAPI_PLUMBING_ASSISTANT_ID')
         phone_number_id = os.getenv('VAPI_PHONE_NUMBER')
 
         if not api_key or not assistant_id or not phone_number_id:
