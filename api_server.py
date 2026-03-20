@@ -214,41 +214,53 @@ def route_tool_by_demo_type(demo_type, function_name, args, data):
     print(f"   args={json.dumps(args, indent=2) if isinstance(args, dict) else args}")
 
     try:
-        # PLUMBING
+        # ---------------------------
+        # PLUMBING DEMO
+        # Expected args:
+        # day, name, time
+        # ---------------------------
         if demo_type == "plumbing" and function_name == "Vertex_Automations_Schedule_Plumbing_Appointment":
             print("🪠 Matched plumbing scheduling tool")
 
-            customer_name = args.get("customerName") or args.get("name") or "Lead"
-            phone_number = args.get("phoneNumber") or args.get("phone") or "N/A"
-            service_address = args.get("serviceAddress") or args.get("address") or "N/A"
-            issue_description = args.get("issueDescription") or args.get("issue") or "Not specified"
-            preferred_date = args.get("preferredDate")
-            time_preference = args.get("timePreference")
+            customer_name = args.get("name")
+            appointment_day = args.get("day")
+            appointment_time = args.get("time")
 
             print("📋 Plumbing values:")
             print(f"   customer_name={customer_name}")
-            print(f"   phone_number={phone_number}")
-            print(f"   service_address={service_address}")
-            print(f"   issue_description={issue_description}")
-            print(f"   preferred_date={preferred_date}")
-            print(f"   time_preference={time_preference}")
+            print(f"   appointment_day={appointment_day}")
+            print(f"   appointment_time={appointment_time}")
 
-            if not preferred_date or not time_preference:
-                print("❌ Missing preferredDate or timePreference for plumbing appointment")
-                return "Error: Missing preferredDate or timePreference for plumbing appointment."
+            missing_fields = []
+            if not customer_name:
+                missing_fields.append("name")
+            if not appointment_day:
+                missing_fields.append("day")
+            if not appointment_time:
+                missing_fields.append("time")
 
-            start_time_obj = resolve_start_time(preferred_date, time_preference)
-            if isinstance(start_time_obj, str) and start_time_obj.startswith("Error"):
-                print(f"❌ resolve_start_time returned error: {start_time_obj}")
-                return start_time_obj
+            if missing_fields:
+                print(f"❌ Missing required plumbing fields: {missing_fields}")
+                return f"Error: Missing required scheduling fields: {', '.join(missing_fields)}."
+
+            try:
+                start_time_obj = datetime.fromisoformat(appointment_time)
+                if start_time_obj.tzinfo is None:
+                    start_time_obj = start_time_obj.replace(tzinfo=ZoneInfo(CLINIC_TZ))
+                print(f"✅ Parsed plumbing appointment time: {start_time_obj.isoformat()}")
+            except Exception as e:
+                print(f"❌ Failed to parse plumbing appointment time '{appointment_time}': {e}")
+                return f"Error: Invalid appointment time format: {appointment_time}"
 
             summary = f"[PLUMBING] Appointment: {customer_name}"
             description = (
                 f"Customer: {customer_name}\n"
-                f"Phone: {phone_number}\n"
-                f"Address: {service_address}\n"
-                f"Issue: {issue_description}"
+                f"Day: {appointment_day}"
             )
+
+            print("📤 Booking plumbing appointment with:")
+            print(f"   summary={summary}")
+            print(f"   description={description}")
 
             event = book_appointment_logic(
                 summary=summary,
@@ -263,49 +275,65 @@ def route_tool_by_demo_type(demo_type, function_name, args, data):
                     f"{start_time_obj.strftime('%A, %B %d, %Y at %I:%M %p')}."
                 )
                 print(f"✅ Plumbing booking result: {result}")
+                print(f"   event_id={event.get('id')}")
+                print(f"   htmlLink={event.get('htmlLink')}")
                 return result
 
             print("❌ Plumbing appointment booking failed")
             return "Failed to book plumbing appointment. Please try again."
 
-        # DENTAL
+        # ---------------------------
+        # DENTAL DEMO
+        # Expected args:
+        # day, name, time, appointment_type
+        # ---------------------------
         elif demo_type == "dental" and function_name == "Vertex_Automations_Schedule_Dental_Appointment":
             print("🦷 Matched dental scheduling tool")
 
-            patient_name = args.get("patientName") or args.get("name") or "Patient"
-            phone_number = args.get("phoneNumber") or args.get("phone") or "N/A"
-            patient_status = args.get("patientStatus", "unknown")
-            appointment_type = args.get("appointmentType") or args.get("procedure") or "General Dental Visit"
-            preferred_date = args.get("preferredDate")
-            time_preference = args.get("timePreference")
-            notes = args.get("notes", "")
+            patient_name = args.get("name")
+            appointment_day = args.get("day")
+            appointment_time = args.get("time")
+            appointment_type = args.get("appointment_type")
 
             print("📋 Dental values:")
             print(f"   patient_name={patient_name}")
-            print(f"   phone_number={phone_number}")
-            print(f"   patient_status={patient_status}")
+            print(f"   appointment_day={appointment_day}")
+            print(f"   appointment_time={appointment_time}")
             print(f"   appointment_type={appointment_type}")
-            print(f"   preferred_date={preferred_date}")
-            print(f"   time_preference={time_preference}")
-            print(f"   notes={notes}")
 
-            if not preferred_date or not time_preference:
-                print("❌ Missing preferredDate or timePreference for dental appointment")
-                return "Error: Missing preferredDate or timePreference for dental appointment."
+            missing_fields = []
+            if not patient_name:
+                missing_fields.append("name")
+            if not appointment_day:
+                missing_fields.append("day")
+            if not appointment_time:
+                missing_fields.append("time")
+            if not appointment_type:
+                missing_fields.append("appointment_type")
 
-            start_time_obj = resolve_start_time(preferred_date, time_preference)
-            if isinstance(start_time_obj, str) and start_time_obj.startswith("Error"):
-                print(f"❌ resolve_start_time returned error: {start_time_obj}")
-                return start_time_obj
+            if missing_fields:
+                print(f"❌ Missing required dental fields: {missing_fields}")
+                return f"Error: Missing required scheduling fields: {', '.join(missing_fields)}."
+
+            try:
+                start_time_obj = datetime.fromisoformat(appointment_time)
+                if start_time_obj.tzinfo is None:
+                    start_time_obj = start_time_obj.replace(tzinfo=ZoneInfo(CLINIC_TZ))
+                print(f"✅ Parsed dental appointment time: {start_time_obj.isoformat()}")
+            except Exception as e:
+                print(f"❌ Failed to parse dental appointment time '{appointment_time}': {e}")
+                return f"Error: Invalid appointment time format: {appointment_time}"
 
             summary = f"[DENTAL] Appointment: {patient_name}"
             description = (
                 f"Patient: {patient_name}\n"
-                f"Phone: {phone_number}\n"
-                f"Patient Status: {patient_status}\n"
-                f"Appointment Type: {appointment_type}\n"
-                f"Notes: {notes}"
+                f"Day: {appointment_day}\n"
+                f"Appointment Type: {appointment_type}"
             )
+
+            print("📤 Booking dental appointment with:")
+            print(f"   summary={summary}")
+            print(f"   description={description}")
 
             event = book_appointment_logic(
                 summary=summary,
@@ -320,11 +348,16 @@ def route_tool_by_demo_type(demo_type, function_name, args, data):
                     f"{start_time_obj.strftime('%A, %B %d, %Y at %I:%M %p')}."
                 )
                 print(f"✅ Dental booking result: {result}")
+                print(f"   event_id={event.get('id')}")
+                print(f"   htmlLink={event.get('htmlLink')}")
                 return result
 
             print("❌ Dental appointment booking failed")
             return "Failed to book dental appointment. Please try again."
 
+        # ---------------------------
+        # UNKNOWN FUNCTION / DEMO MISMATCH
+        # ---------------------------
         warning_msg = f"Warning: Function '{function_name}' is not expected for the '{demo_type}' demo."
         print(f"⚠️ {warning_msg}")
         return warning_msg
