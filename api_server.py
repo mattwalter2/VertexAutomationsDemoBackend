@@ -110,34 +110,102 @@ def book_appointment_logic(summary, start_time_iso, duration_minutes=30, descrip
 # --- Tool Dispatcher for Vapi ---
 
 def route_tool_by_demo_type(demo_type, function_name, args, data):
-    """Routes Vapi tool calls to the correct internal logic based on the requested names."""
+    """Routes Vapi tool calls to the correct internal logic based on demo type and function name."""
     print(f"🚀 Dispatching tool: {function_name} for Demo: {demo_type}")
+
     try:
-        # Plumbing-specific function: Scheduling/Booking
+        # ---------------------------
+        # PLUMBING DEMO
+        # ---------------------------
         if demo_type == "plumbing" and function_name == "Vertex_Automations_Schedule_Plumbing_Appointment":
-            summary = f"[PLUMBING] Appointment: {args.get('name', 'Lead')}"
-            event = book_appointment_logic(
-                summary=summary, 
-                start_time_iso=args.get('dateTime'), 
-                description=f"Phone: {args.get('phone', 'N/A')}\nIssue: {args.get('issue', 'Not specified')}"
+            customer_name = args.get("customerName") or args.get("name") or "Lead"
+            phone_number = args.get("phoneNumber") or args.get("phone") or "N/A"
+            service_address = args.get("serviceAddress") or args.get("address") or "N/A"
+            issue_description = args.get("issueDescription") or args.get("issue") or "Not specified"
+            preferred_date = args.get("preferredDate")
+            time_preference = args.get("timePreference")
+
+            if not preferred_date or not time_preference:
+                return "Error: Missing preferredDate or timePreference for plumbing appointment."
+
+            start_time_iso = resolve_start_time(preferred_date, time_preference)
+            if isinstance(start_time_iso, str) and start_time_iso.startswith("Error"):
+                return start_time_iso
+
+            summary = f"[PLUMBING] Appointment: {customer_name}"
+            description = (
+                f"Customer: {customer_name}\n"
+                f"Phone: {phone_number}\n"
+                f"Address: {service_address}\n"
+                f"Issue: {issue_description}"
             )
+
+            event = book_appointment_logic(
+                summary=summary,
+                start_time_iso=start_time_iso.isoformat(),
+                duration_minutes=60,
+                description=description
+            )
+
             if event:
-                return f"Plumbing appointment confirmed! Confirmation ID: {event.get('id')}"
+                return (
+                    f"Success! Plumbing appointment booked for "
+                    f"{start_time_iso.strftime('%A, %B %d, %Y at %I:%M %p')}."
+                )
+
             return "Failed to book plumbing appointment. Please try again."
 
-        # Dental-specific function: Availability Check
-        elif demo_type == "dental" and function_name == "Vertex_Automations_Check_Dental_Clinic_Availability":
-            date_str = args.get("date")
-            if not date_str:
-                return "Error: No date provided for the dental clinic availability check."
-            return check_availability_logic(date_str)
-            
+        # ---------------------------
+        # DENTAL DEMO
+        # ---------------------------
+        elif demo_type == "dental" and function_name == "Vertex_Automations_Schedule_Dental_Appointment":
+            patient_name = args.get("patientName") or args.get("name") or "Patient"
+            phone_number = args.get("phoneNumber") or args.get("phone") or "N/A"
+            patient_status = args.get("patientStatus", "unknown")
+            appointment_type = args.get("appointmentType") or args.get("procedure") or "General Dental Visit"
+            preferred_date = args.get("preferredDate")
+            time_preference = args.get("timePreference")
+            notes = args.get("notes", "")
+
+            if not preferred_date or not time_preference:
+                return "Error: Missing preferredDate or timePreference for dental appointment."
+
+            start_time_iso = resolve_start_time(preferred_date, time_preference)
+            if isinstance(start_time_iso, str) and start_time_iso.startswith("Error"):
+                return start_time_iso
+
+            summary = f"[DENTAL] Appointment: {patient_name}"
+            description = (
+                f"Patient: {patient_name}\n"
+                f"Phone: {phone_number}\n"
+                f"Patient Status: {patient_status}\n"
+                f"Appointment Type: {appointment_type}\n"
+                f"Notes: {notes}"
+            )
+
+            event = book_appointment_logic(
+                summary=summary,
+                start_time_iso=start_time_iso.isoformat(),
+                duration_minutes=60,
+                description=description
+            )
+
+            if event:
+                return (
+                    f"Success! Dental appointment booked for "
+                    f"{start_time_iso.strftime('%A, %B %d, %Y at %I:%M %p')}."
+                )
+
+            return "Failed to book dental appointment. Please try again."
+
+        # ---------------------------
+        # UNKNOWN FUNCTION
+        # ---------------------------
         return f"Warning: Function '{function_name}' is not expected for the '{demo_type}' demo."
+
     except Exception as e:
         print(f"❌ Dispatcher error: {e}")
         return f"Error in dispatcher: {str(e)}"
-
-# --- API Endpoints ---
 
 @app.route('/api/vapi/initiate-call', methods=['POST'])
 def initiate_call():
